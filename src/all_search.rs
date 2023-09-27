@@ -4,8 +4,8 @@ use crate::error::AppError;
 
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use itertools::Itertools;
-use std::collections::HashSet;
 
+// 全探索の結果
 #[derive(Debug, Clone, PartialEq)]
 pub struct AllSearchResult {
     pub pattern_result: Vec<f64>,
@@ -30,11 +30,8 @@ pub fn all_search_pattern(
             ))?;
     let mut numbers_per_level: Vec<u64> = vec![0; max_level as usize + 1];
 
-    let mut pattern_sets: Vec<(
-        HashSet<&String>,
-        Option<HashSet<&String>>,
-        Option<HashSet<&String>>,
-    )> = Vec::new(); // パターンのfirst, second, thirdをそれぞれHashSetにしたもの
+    let mut patterns_vec: Vec<(Vec<&String>, Option<Vec<&String>>, Option<Vec<&String>>)> =
+        Vec::new(); // パターンのfirst, second, thirdをそれぞれHashSetにしたもの
     for pat in patterns.iter() {
         let InitialPattern {
             first,
@@ -45,15 +42,15 @@ pub fn all_search_pattern(
         match (second, third) {
             // firstのみの場合
             (None, None) => {
-                pattern_sets.push((first.as_set(), None, None));
+                patterns_vec.push((first.as_vec(), None, None));
             }
             // first, secondのみの場合
             (Some(second), None) => {
-                pattern_sets.push((first.as_set(), Some(second.as_set()), None));
+                patterns_vec.push((first.as_vec(), Some(second.as_vec()), None));
             }
             // first, second, thirdの場合
             (Some(second), Some(third)) => {
-                pattern_sets.push((first.as_set(), Some(second.as_set()), Some(third.as_set())))
+                patterns_vec.push((first.as_vec(), Some(second.as_vec()), Some(third.as_vec())))
             }
             (_, _) => {
                 return Err(AppError::InvalidDataError(
@@ -79,37 +76,78 @@ pub fn all_search_pattern(
     for hands in all_search_combination
         .progress_with(ProgressBar::new(all_pattern_number).with_style(pb_style))
     {
-        let hands_set = hands
+        let mut hand_names = hands
             .into_iter()
             .map(|j| card_names[j])
-            .collect::<HashSet<&String>>();
+            .collect::<Vec<&String>>();
+
+        // 手札のカード名をソート
+        hand_names.sort();
 
         let mut flags_per_level: Vec<bool> = vec![false; max_level as usize + 1];
 
-        for (pat_i, (first_set, second_set, third_set)) in pattern_sets.iter().enumerate() {
+        for (pat_i, (first_vec, second_vec, third_vec)) in patterns_vec.iter().enumerate() {
             let level = patterns[pat_i].level;
 
-            match (second_set, third_set) {
+            match (second_vec, third_vec) {
                 // firstのみの場合
                 (None, None) => {
-                    if !hands_set.is_disjoint(first_set) {
+                    let mut pattern_flag = false;
+
+                    for first_card_name in first_vec.into_iter() {
+                        let pattern_names = vec![*first_card_name];
+                        if lexicographical_superset(&hand_names, &pattern_names) {
+                            pattern_flag = true;
+                        }
+                    }
+
+                    if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
                         flags_per_level[level as usize] = true;
                     }
                 }
                 // first, secondのみの場合
-                (Some(second_set), None) => {
-                    if !hands_set.is_disjoint(first_set) && !hands_set.is_disjoint(second_set) {
+                (Some(second_vec), None) => {
+                    let mut pattern_flag = false;
+
+                    for pattern_names in vec![first_vec, second_vec]
+                        .into_iter()
+                        .multi_cartesian_product()
+                    {
+                        let mut pattern_names = pattern_names
+                            .into_iter()
+                            .map(|name| *name)
+                            .collect::<Vec<_>>();
+                        pattern_names.sort();
+                        if lexicographical_superset(&hand_names, &pattern_names) {
+                            pattern_flag = true;
+                        }
+                    }
+
+                    if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
                         flags_per_level[level as usize] = true;
                     }
                 }
                 // first, second, thirdの場合
-                (Some(second_set), Some(third_set)) => {
-                    if !hands_set.is_disjoint(first_set)
-                        && !hands_set.is_disjoint(second_set)
-                        && !hands_set.is_disjoint(third_set)
+                (Some(second_vec), Some(third_vec)) => {
+                    let mut pattern_flag = false;
+
+                    for pattern_names in vec![first_vec, second_vec, third_vec]
+                        .into_iter()
+                        .multi_cartesian_product()
                     {
+                        let mut pattern_names = pattern_names
+                            .into_iter()
+                            .map(|name| *name)
+                            .collect::<Vec<_>>();
+                        pattern_names.sort();
+                        if lexicographical_superset(&hand_names, &pattern_names) {
+                            pattern_flag = true;
+                        }
+                    }
+
+                    if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
                         flags_per_level[level as usize] = true;
                     }
@@ -137,4 +175,48 @@ pub fn all_search_pattern(
             .map(|level_n| level_n as f64 / all_pattern_number as f64)
             .collect(),
     })
+}
+
+/// ソートされた手札とその部分パターンについて，辞書式に比較して手札がスーパーセットであるかどうかを取得する
+fn lexicographical_superset<T: PartialEq>(hands: &[T], pattern: &[T]) -> bool {
+    let hands_iter = hands.iter();
+    let mut pattern_iter = pattern.iter();
+
+    if let Some(mut pattern_card_name) = pattern_iter.next() {
+        for hand_card_name in hands_iter {
+            // 手札の一枚とパターンの一枚が一致する場合
+            if hand_card_name == pattern_card_name {
+                match pattern_iter.next() {
+                    Some(next_pattern_card_name) => {
+                        pattern_card_name = next_pattern_card_name;
+                    }
+                    None => {
+                        // pattern内のカードが全て一致したため
+                        return true;
+                    }
+                }
+            }
+        }
+        // trueが返る前にhands_iterのイテレーションが終了してしまった場合
+        false
+    } else {
+        // パターンにカードが一つも入っていない場合
+        true
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_lexicographical_superset() {
+        let hands = vec!["A", "B", "C", "D", "E"];
+        let pattern_1 = vec!["C", "D"];
+        assert!(super::lexicographical_superset(&hands, &pattern_1));
+
+        let pattern_2 = vec!["C", "F"];
+        assert!(!super::lexicographical_superset(&hands, &pattern_2));
+
+        let pattern_3 = vec!["C", "B"];
+        assert!(!super::lexicographical_superset(&hands, &pattern_3));
+    }
 }

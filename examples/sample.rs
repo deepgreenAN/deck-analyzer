@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let prob = pattern_prob(&deck, pat, 5)?;
         let InitialPattern { name, level, .. } = pat;
 
-        println!("name: {}, level: {}, prob: {:.4}", name, level, prob);
+        println!("name: {}, level: {}, prob: {:.8}", name, level, prob);
     }
 
     println!("");
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (i, pat) in init_patterns.iter().enumerate() {
         let InitialPattern { name, level, .. } = pat;
         println!(
-            "name: {}, level: {}, prob: {:.4}",
+            "name: {}, level: {}, prob: {:.8}",
             name, level, pattern_result[i]
         );
     }
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("level prob");
 
     for i in 0..level_result.len() {
-        println!("level: {}, prob: {:.4}", i, level_result[i]);
+        println!("level: {}, prob: {:.8}", i, level_result[i]);
     }
 
     Ok(())

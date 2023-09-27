@@ -23,6 +23,18 @@ impl StringOrList {
         }
         hash_set
     }
+    pub fn as_vec(&self) -> Vec<&String> {
+        let mut vec: Vec<&String> = Vec::new();
+        match self {
+            Self::String(s) => {
+                vec.push(s);
+            }
+            Self::List(list) => {
+                vec.extend(list);
+            }
+        }
+        vec
+    }
 }
 
 impl Default for StringOrList {
