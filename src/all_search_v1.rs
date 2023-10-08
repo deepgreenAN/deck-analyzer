@@ -60,34 +60,38 @@ pub fn all_search_pattern(
         }
     }
 
-    let mut card_names: Vec<&String> = Vec::new(); // 枚数を考慮したデッキのカードの羅列
-    for card in deck.iter() {
-        for _ in 0..card.number {
-            card_names.push(&card.name);
+    // 枚数を考慮したデッキのカード名の羅列
+    let card_names: Vec<&String> = {
+        let mut card_names = Vec::new();
+        for card in deck.iter() {
+            for _ in 0..card.number {
+                card_names.push(&card.name);
+            }
         }
-    }
-    let deck_number = card_names.len(); // デッキのカード枚数
+        card_names
+    };
 
-    let all_search_combination = (0..deck_number).combinations(draw_n as usize);
+    let all_search_combination = (0..card_names.len()).combinations(draw_n as usize); // 手札パターンの組み合わせ(インデックス)をyieldするイテレータ―
     let all_pattern_number =
-        combination_n(deck_number as u64, draw_n).ok_or(AppError::OverflowCombinationError)?;
+        combination_n(card_names.len() as u64, draw_n).ok_or(AppError::OverflowCombinationError)?; // all_search_combinationの長さ
 
-    // 全探索のイテレーション
-    for hands in all_search_combination
+    // 全探索のイテレーション(n_h * n_p * n_p_c) (n_h: ハンドの組み合わせ数, n_p: 初動パターン数, パターン内のカード)
+    for hands_indices in all_search_combination
         .progress_with(ProgressBar::new(all_pattern_number).with_style(pb_style))
     {
-        let mut hand_names = hands
+        let mut hand_names: Vec<&String> = hands_indices
             .into_iter()
-            .map(|j| card_names[j])
-            .collect::<Vec<&String>>();
+            .map(|j| *card_names.get(j).unwrap())
+            .collect();
 
         // 手札のカード名をソート
         hand_names.sort();
 
-        let mut flags_per_level: Vec<bool> = vec![false; max_level as usize + 1];
+        // ハンドに対応したレベル
+        let mut level_flag: Option<usize> = None;
 
         for (pat_i, (first_vec, second_vec, third_vec)) in patterns_vec.iter().enumerate() {
-            let level = patterns[pat_i].level;
+            let level = patterns.get(pat_i).unwrap().level;
 
             match (second_vec, third_vec) {
                 // firstのみの場合
@@ -95,15 +99,17 @@ pub fn all_search_pattern(
                     let mut pattern_flag = false;
 
                     for first_card_name in first_vec.into_iter() {
-                        let pattern_names = vec![*first_card_name];
+                        let pattern_names = [*first_card_name];
                         if lexicographical_superset(&hand_names, &pattern_names) {
                             pattern_flag = true;
+                            break; // 早期終了
                         }
                     }
 
+                    // パターンにマッチした場合
                     if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
-                        flags_per_level[level as usize] = true;
+                        level_flag = op_max(level_flag, Some(level as usize));
                     }
                 }
                 // first, secondのみの場合
@@ -119,14 +125,17 @@ pub fn all_search_pattern(
                             .map(|name| *name)
                             .collect::<Vec<_>>();
                         pattern_names.sort();
+
                         if lexicographical_superset(&hand_names, &pattern_names) {
                             pattern_flag = true;
+                            break; // 早期終了
                         }
                     }
 
+                    // パターンにマッチした場合
                     if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
-                        flags_per_level[level as usize] = true;
+                        level_flag = op_max(level_flag, Some(level as usize));
                     }
                 }
                 // first, second, thirdの場合
@@ -144,24 +153,25 @@ pub fn all_search_pattern(
                         pattern_names.sort();
                         if lexicographical_superset(&hand_names, &pattern_names) {
                             pattern_flag = true;
+                            break; // 早期終了
                         }
                     }
 
+                    // パターンにマッチした場合
                     if pattern_flag {
                         numbers_per_pat[pat_i] += 1;
-                        flags_per_level[level as usize] = true;
+                        level_flag = op_max(level_flag, Some(level as usize));
                     }
                 }
                 (_, _) => {}
             }
         }
 
-        for level in flags_per_level
-            .iter()
-            .enumerate()
-            .filter_map(|(level, flag)| flag.then_some(level))
-        {
-            numbers_per_level[level] += 1;
+        if let Some(level) = level_flag {
+            // そのレベルまでの全てのレベルをインクリメント
+            for l in 0..level + 1 {
+                numbers_per_level[l] += 1;
+            }
         }
     }
 
@@ -175,6 +185,16 @@ pub fn all_search_pattern(
             .map(|level_n| level_n as f64 / all_pattern_number as f64)
             .collect(),
     })
+}
+
+/// Option<T>の大きい方を取得する
+fn op_max<T: Ord>(x: Option<T>, y: Option<T>) -> Option<T> {
+    match (x, y) {
+        (Some(x), Some(y)) => Some(std::cmp::max(x, y)),
+        (None, Some(y)) => Some(y),
+        (Some(x), None) => Some(x),
+        (None, None) => None,
+    }
 }
 
 /// ソートされた手札とその部分パターンについて，辞書式に比較して手札がスーパーセットであるかどうかを取得する

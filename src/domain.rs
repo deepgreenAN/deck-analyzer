@@ -1,4 +1,10 @@
+mod counter_set;
 mod string_or_list;
+
+/// データ構造をまとめておく
+pub mod data_structure {
+    pub use super::counter_set::CounterSet;
+}
 
 pub use string_or_list::StringOrList;
 

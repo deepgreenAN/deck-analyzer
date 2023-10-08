@@ -1,4 +1,7 @@
-pub mod all_search;
+pub mod all_search_v1;
+pub use all_search_v1 as all_search;
+pub mod all_search_v2;
+
 pub mod combinations;
 pub mod domain;
 mod error;

@@ -7,7 +7,7 @@ use indicatif::ProgressStyle;
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let deck = read_json::<Vec<Card>>(&PathBuf::from("sample_deck.json"))?;
+    let deck = read_json::<Vec<Card>>(&PathBuf::from("sample_deck_v3.json"))?;
     let init_patterns =
         read_json::<Vec<InitialPattern>>(&PathBuf::from("sample_init_pattern.json"))?;
 
